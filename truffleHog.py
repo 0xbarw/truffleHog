@@ -9,8 +9,11 @@ import os
 import stat
 from git import Repo
 
+
+
+
 if sys.version_info[0] == 2:
-    reload(sys)  
+    reload(sys)
     sys.setdefaultencoding('utf8')
 
 BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
@@ -34,7 +37,7 @@ def shannon_entropy(data, iterator):
     return entropy
 
 
-def get_strings_of_set(word, char_set, threshold=20):
+def get_strings_of_set(word, char_set, threshold):
     count = 0
     letters = ""
     strings = []
@@ -61,7 +64,7 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
-def find_strings(git_url):
+def find_strings(git_url, threshold):
     project_path = tempfile.mkdtemp()
 
     Repo.clone_from(git_url, project_path)
@@ -76,7 +79,7 @@ def find_strings(git_url):
             repo.git.checkout(remote_branch, b=branch_name)
         except:
             pass
-     
+
         prev_commit = None
         for curr_commit in repo.iter_commits():
             if not prev_commit:
@@ -99,8 +102,8 @@ def find_strings(git_url):
                     lines = blob.diff.decode().split("\n")
                     for line in lines:
                         for word in line.split():
-                            base64_strings = get_strings_of_set(word, BASE64_CHARS)
-                            hex_strings = get_strings_of_set(word, HEX_CHARS)
+                            base64_strings = get_strings_of_set(word, BASE64_CHARS, threshold)
+                            hex_strings = get_strings_of_set(word, HEX_CHARS, threshold)
                             for string in base64_strings:
                                 b64Entropy = shannon_entropy(string, BASE64_CHARS)
                                 if b64Entropy > 4.5:
@@ -117,16 +120,20 @@ def find_strings(git_url):
                         print(bcolors.OKGREEN + "Branch: " + branch_name + bcolors.ENDC)
                         print(bcolors.OKGREEN + "Commit: " + prev_commit.message + bcolors.ENDC)
                         print(printableDiff)
-                    
+
             prev_commit = curr_commit
     return project_path
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Find secrets hidden in the depths of git.')
     parser.add_argument('git_url', type=str, help='URL for secret searching')
-
+    parser.add_argument('threshold_arg', type=int, help='Threshold for the string length')
 
     args = parser.parse_args()
-    project_path = find_strings(args.git_url)
+    if args.threshold_arg < 15:
+        print(bcolors.FAIL + "We do not allow a threshold smaller than 15...sorry :(" +  bcolors.ENDC)
+        print(bcolors.OKGREEN + "Setting threshold to 15" +  bcolors.ENDC)
+        project_path = find_strings(args.git_url, 15)
+    else:
+        project_path = find_strings(args.git_url, args.threshold_arg)
     shutil.rmtree(project_path, onerror=del_rw)
-
